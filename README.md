@@ -1,12 +1,7 @@
-# Overview of the Basic Custom Engine Agent template
+# Overview of the Proxy Agent
 
 This app template is built on top of [Microsoft 365 Agents SDK](https://github.com/Microsoft/Agents).
 It showcases a simple proxy agent, which simply forwards messages between Teams/M365 and your own agent endpoint
-
-To test the setup you can run a sample message returning backend. Here is an example, it just returns "Hello, world!" back to the user.
-```
-node -e "require('http').createServer((req,res)=>{if(req.method==='POST'&&req.url==='/chat'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify({answer:'Hello, world!'}));});}else{res.statusCode=404;res.end('not found');}}).listen(8000,()=>console.log('backend on 8000'))"
-```
 
 ## Get started with the template
 
@@ -22,6 +17,11 @@ node -e "require('http').createServer((req,res)=>{if(req.method==='POST'&&req.ur
 1. First, select the Microsoft 365 Agents Toolkit icon on the left in the VS Code toolbar.
 1. Press F5 to start debugging which launches your agent in Microsoft 365 Agents Playground using a web browser. Select `Debug in Microsoft 365 Agents Playground`.
 1. You can send any message to get a response from the agent.
+
+> You also need to have some sort of backend running. Here is a simple example that just echos "Hello, World!" back to the agent:
+```
+node -e "require('http').createServer((req,res)=>{if(req.method==='POST'&&req.url==='/chat'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify({answer:'Hello, world!'}));});}else{res.statusCode=404;res.end('not found');}}).listen(8000,()=>console.log('backend on 8000'))"
+```
 
 **Congratulations**! You are running an agent that can now interact with users in Microsoft 365 Agents Playground:
 
