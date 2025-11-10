@@ -42,7 +42,6 @@ The following files can be customized and demonstrate an example implementation 
 | File                                 | Contents                                           |
 | - | - |
 |`src/index.js`| Sets up the agent server.|
-|`src/adapter.js`| Sets up the agent adapter.|
 |`src/config.js`| Defines the environment variables.|
 |`src/agent.js`| Handles business logics for the Proxy Agent.|
 
@@ -64,6 +63,9 @@ The following are Microsoft 365 Agents Toolkit specific project files. You can [
 - The agent is currently not working in any Teams group chats or Teams channels when the stream response is enabled.
 - The provisioning for `teamsApp/extendToM365` inside the yaml files (`m365agents.yml`, `m365agents.local.yml` and `m365agents.playground.yml`) is currently broken, so its commented out
 - The default deployment is also broken. You can deploy manually using a command like this:
+```
+zip -r app.zip . -x ".git/*" "node_modules/*" ".vscode/*" "env/*" ".deployment/*" "app.zip"
+```
 ```
 az webapp deploy \
   --resource-group <RESOURCE_GROUP> \

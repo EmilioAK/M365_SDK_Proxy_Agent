@@ -3,15 +3,6 @@
 @description('Used to generate names for all resources in this file')
 param resourceBaseName string
 
-@secure()
-param azureOpenAIKey string
-
-@secure()
-param azureOpenAIEndpoint string
-
-@secure()
-param azureOpenAIDeploymentName string
-
 param webAppSKU string
 
 @maxLength(42)
@@ -67,18 +58,6 @@ resource webApp 'Microsoft.Web/sites@2021-02-01' = {
         {
           name: 'tenantId'
           value: identity.properties.tenantId
-        }
-        {
-          name: 'AZURE_OPENAI_API_KEY'
-          value: azureOpenAIKey
-        }
-        {
-          name: 'AZURE_OPENAI_ENDPOINT'
-          value: azureOpenAIEndpoint
-        }
-        {
-          name: 'AZURE_OPENAI_DEPLOYMENT_NAME'
-          value: azureOpenAIDeploymentName
         }
       ]
       ftpsState: 'FtpsOnly'

@@ -1,57 +1,48 @@
 const { ActivityTypes } = require("@microsoft/agents-activity");
 const { AgentApplication, MemoryStorage } = require("@microsoft/agents-hosting");
 const axios = require("axios");
+const config = require("./config");
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8000";
-const BACKEND_PATH = process.env.BACKEND_PATH || "/chat";
+// robust join: ensures exactly one slash
+function buildEndpoint(base, path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return new URL(p, base).toString();
+}
+const ENDPOINT = buildEndpoint(config.backendUrl, config.backendPath);
 
-// Define storage and application
 const storage = new MemoryStorage();
 const agentApp = new AgentApplication({ storage });
 
-// Optional welcome
 agentApp.onConversationUpdate("membersAdded", async (context) => {
-  // await context.sendActivity(`Hi there! I'm an agent to chat with you.`);
-  console.log("membersAdded:", context.activity.membersAdded?.map(m => m.id));
+  // optional welcome/log
 });
 
-// Optional typing log
 agentApp.onActivity(ActivityTypes.Typing, async (context) => {
-  console.log("typing from:", context.activity.from?.id);
+  // optional log
 });
 
-// Proxy: take user text → call backend → send backend text
 agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const userText = context.activity?.text ?? "";
-  console.log("user message:", userText);
-
   try {
     const { data } = await axios.post(
-      `${BACKEND_URL}${BACKEND_PATH}`,
+      ENDPOINT,
       { prompt: userText },
       { headers: { "Content-Type": "application/json" } }
     );
 
     let answer;
-    if (typeof data === "string") {
-      answer = data;
-    } else if (data && typeof data === "object") {
-      if (typeof data.answer === "string" && data.answer) {
-        answer = data.answer;
-      } else if (typeof data.result === "string" && data.result) {
-        answer = data.result;
-      } else if (typeof data.text === "string" && data.text) {
-        answer = data.text;
-      } else if (typeof data.content === "string" && data.content) {
-        answer = data.content;
-      } else {
-        answer = JSON.stringify(data);
-      }
+    if (typeof data === "string") answer = data;
+    else if (data && typeof data === "object") {
+      answer =
+        (typeof data.answer === "string" && data.answer) ||
+        (typeof data.result === "string" && data.result) ||
+        (typeof data.text === "string" && data.text) ||
+        (typeof data.content === "string" && data.content) ||
+        JSON.stringify(data);
     } else {
       answer = String(data);
     }
 
-    console.log("backend answer (first 120):", String(answer).slice(0, 120));
     await context.sendActivity(answer);
   } catch (err) {
     console.error("backend call failed:", err?.message || err);
