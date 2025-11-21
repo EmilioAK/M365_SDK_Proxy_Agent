@@ -24,26 +24,62 @@ agentApp.onActivity(ActivityTypes.Typing, async (context) => {
 agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const userText = context.activity?.text ?? "";
   try {
-    const { data } = await axios.post(
-      ENDPOINT,
-      { prompt: userText },
-      { headers: { "Content-Type": "application/json" } }
-    );
+    const response = await axios({
+      method: 'post',
+      url: ENDPOINT,
+      data: {
+        messages: [
+          {
+            role: "user",
+            content: userText
+          }
+        ]
+      },
+      responseType: 'stream',
+      headers: { "Content-Type": "application/json" }
+    });
 
-    let answer;
-    if (typeof data === "string") answer = data;
-    else if (data && typeof data === "object") {
-      answer =
-        (typeof data.answer === "string" && data.answer) ||
-        (typeof data.result === "string" && data.result) ||
-        (typeof data.text === "string" && data.text) ||
-        (typeof data.content === "string" && data.content) ||
-        JSON.stringify(data);
+    let fullAnswer = "";
+
+    // Process the stream
+    await new Promise((resolve, reject) => {
+      response.data.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonStr = line.substring(6).trim();
+              if (!jsonStr) continue;
+
+              const event = JSON.parse(jsonStr);
+
+              if (event.type === 'TEXT_MESSAGE_CONTENT') {
+                fullAnswer += event.delta;
+              } else if (event.type === 'RUN_FINISHED') {
+                // Run is done
+              }
+            } catch (e) {
+              console.error("Error parsing SSE event:", e);
+            }
+          }
+        }
+      });
+
+      response.data.on('end', () => {
+        resolve();
+      });
+
+      response.data.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    if (fullAnswer) {
+      await context.sendActivity(fullAnswer);
     } else {
-      answer = String(data);
+      await context.sendActivity("No response received from backend.");
     }
 
-    await context.sendActivity(answer);
   } catch (err) {
     console.error("backend call failed:", err?.message || err);
     await context.sendActivity("Sorry, I couldn't generate a response right now.");
