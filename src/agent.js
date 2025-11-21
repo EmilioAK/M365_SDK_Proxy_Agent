@@ -1,6 +1,6 @@
 // agent.js
 const { ActivityTypes } = require("@microsoft/agents-activity");
-const { AgentApplication, MemoryStorage } = require("@microsoft/agents-hosting");
+const { AgentApplication, MemoryStorage, StreamingResponse } = require("@microsoft/agents-hosting");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const config = require("./config");
@@ -30,7 +30,7 @@ agentApp.onActivity(ActivityTypes.Typing, async (context) => {
  * - Headers: Content-Type: application/json, Accept: text/event-stream
  * - Response: SSE stream of JSON-encoded AG-UI events
  */
-async function runAguiAgent(userText, context) {
+async function runAguiAgent(userText, context, { onToken, onDone } = {}) {
   const activity = context.activity ?? {};
 
   // Use the Teams conversation id as threadId so all messages in a chat
@@ -129,8 +129,12 @@ async function runAguiAgent(userText, context) {
       }
     });
 
-    stream.on("end", () => {
+    stream.on("end", async () => {
       const answer = buildFinalAnswer();
+      if (onDone) {
+        await onDone(answer, { sawRunError, finalResult });
+      }
+      // keep your existing resolve logic:
       if (!answer && sawRunError) {
         return resolve("Sorry, the agent reported an error while handling your request.");
       }
@@ -170,8 +174,6 @@ async function runAguiAgent(userText, context) {
         case "TEXT_MESSAGE_START": {
           const { messageId, role } = event;
           if (!messageId) break;
-
-          // Only accumulate assistant messages (role may be omitted; default is assistant per spec)
           if (role && role !== "assistant") break;
 
           if (!assistantMessages.has(messageId)) {
@@ -188,11 +190,14 @@ async function runAguiAgent(userText, context) {
           if (!assistantMessages.has(messageId)) {
             assistantMessages.set(messageId, "");
           }
-          assistantMessages.set(
-            messageId,
-            assistantMessages.get(messageId) + delta
-          );
+          const next = assistantMessages.get(messageId) + delta;
+          assistantMessages.set(messageId, next);
           lastAssistantMessageId = messageId;
+
+          if (onToken) {
+            // send the latest full text for that message
+            onToken(delta, { messageId, fullText: next });
+          }
           break;
         }
 
@@ -210,8 +215,13 @@ async function runAguiAgent(userText, context) {
           if (!assistantMessages.has(id)) {
             assistantMessages.set(id, "");
           }
-          assistantMessages.set(id, assistantMessages.get(id) + delta);
+          const next = assistantMessages.get(id) + delta;
+          assistantMessages.set(id, next);
           lastAssistantMessageId = id;
+
+          if (onToken) {
+            onToken(delta, { messageId: id, fullText: next });
+          }
           break;
         }
 
@@ -250,17 +260,75 @@ async function runAguiAgent(userText, context) {
   });
 }
 
+agentApp.adapter.onTurnError = async (context, error) => {
+  console.error("[onTurnError] unhandled error:", error);
+
+  const streamer = context.streamingResponse;
+  if (streamer) {
+    streamer.queueTextChunk("Sorry, something went wrong on my side.");
+    await streamer.endStream();
+  } else {
+    await context.sendActivity("Sorry, something went wrong on my side.");
+  }
+};
+
+// agent.js (only the Message handler)
+
 agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const userText = context.activity?.text ?? "";
+  console.log("[Message] incoming:", userText);
 
+  const streamer = context.streamingResponse;
+
+  // Fallback: if streaming isn’t available, just do a normal single response.
+  if (!streamer) {
+    try {
+      const answer = await runAguiAgent(userText, context);
+      await context.sendActivity(answer);
+    } catch (err) {
+      console.error("AG-UI backend call failed (non-streaming):", err?.message || err);
+      await context.sendActivity("Sorry, I couldn't generate a response right now.");
+    }
+    return;
+  }
+
+  // Streaming path
   try {
-    const answer = await runAguiAgent(userText, context);
-    await context.sendActivity(answer);
+    streamer.setGeneratedByAILabel?.(true);
+    streamer.setFeedbackLoop?.(true);
+
+    let hasStreamed = false;
+
+    await runAguiAgent(userText, context, {
+      onToken: (delta) => {
+        if (!delta) return;
+        hasStreamed = true;
+
+        // ✅ send only the new chunk
+        streamer.queueTextChunk(delta);
+      },
+
+      onDone: async (answer, { sawRunError }) => {
+        // If nothing was streamed, send a single final message
+        if (!hasStreamed) {
+          const text =
+            answer ||
+            (sawRunError
+              ? "Sorry, the agent reported an error while handling your request."
+              : "Sorry, I couldn't generate a response right now.");
+
+          if (text) {
+            streamer.queueTextChunk(text);
+          }
+        }
+
+        await streamer.endStream();
+      },
+    });
   } catch (err) {
-    console.error("AG-UI backend call failed:", err?.message || err);
-    await context.sendActivity(
-      "Sorry, I couldn't generate a response right now."
-    );
+    console.error("AG-UI backend call failed (streaming):", err?.message || err);
+    streamer.queueTextChunk("Sorry, I couldn't generate a response right now.");
+    await streamer.endStream();
   }
 });
 
