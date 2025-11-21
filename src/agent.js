@@ -30,7 +30,7 @@ agentApp.onActivity(ActivityTypes.Typing, async (context) => {
  * - Headers: Content-Type: application/json, Accept: text/event-stream
  * - Response: SSE stream of JSON-encoded AG-UI events
  */
-async function runAguiAgent(userText, context, { onToken, onDone } = {}) {
+async function runAguiAgent(userText, context, { onToken, onDone, onAdaptiveCard } = {}) {
   const activity = context.activity ?? {};
 
   // Use the Teams conversation id as threadId so all messages in a chat
@@ -225,6 +225,34 @@ async function runAguiAgent(userText, context, { onToken, onDone } = {}) {
           break;
         }
 
+        case "TEAMS_ADAPTIVE_CARD": {
+          const { card, textFallback } = event;
+
+          // Fire callback so the outer handler can send the card to Teams
+          if (card && onAdaptiveCard) {
+            onAdaptiveCard(card, { textFallback });
+          }
+
+          // Optionally also treat textFallback as assistant text
+          if (typeof textFallback === "string" && textFallback) {
+            const messageId = event.messageId || (lastAssistantMessageId ?? uuidv4());
+
+            if (!assistantMessages.has(messageId)) {
+              assistantMessages.set(messageId, "");
+            }
+
+            const next = assistantMessages.get(messageId) + textFallback;
+            assistantMessages.set(messageId, next);
+            lastAssistantMessageId = messageId;
+
+            if (onToken) {
+              onToken(textFallback, { messageId, fullText: next });
+            }
+          }
+
+          break;
+        }
+
         // Other event types (tools, state, activity, etc.) are ignored for now.
         default:
           break;
@@ -280,11 +308,33 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
 
   const streamer = context.streamingResponse;
 
-  // Fallback: if streaming isn’t available, just do a normal single response.
   if (!streamer) {
+    // non-streaming path
+    let hasOutput = false;
+
     try {
-      const answer = await runAguiAgent(userText, context);
-      await context.sendActivity(answer);
+      await runAguiAgent(userText, context, {
+        onAdaptiveCard: async (card) => {
+          hasOutput = true;
+          await context.sendActivity({
+            type: "message",
+            attachments: [{
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: card,
+            }],
+          });
+        },
+        onDone: async (answer, { sawRunError }) => {
+          if (!hasOutput && answer) {
+            await context.sendActivity(answer);
+          } else if (!hasOutput) {
+            const fallback = sawRunError
+              ? "Sorry, the agent reported an error while handling your request."
+              : "Sorry, I couldn't generate a response right now.";
+            await context.sendActivity(fallback);
+          }
+        },
+      });
     } catch (err) {
       console.error("AG-UI backend call failed (non-streaming):", err?.message || err);
       await context.sendActivity("Sorry, I couldn't generate a response right now.");
@@ -297,20 +347,28 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
     streamer.setGeneratedByAILabel?.(true);
     streamer.setFeedbackLoop?.(true);
 
-    let hasStreamed = false;
+    let hasOutput = false;
 
     await runAguiAgent(userText, context, {
       onToken: (delta) => {
         if (!delta) return;
-        hasStreamed = true;
-
-        // ✅ send only the new chunk
+        hasOutput = true;
         streamer.queueTextChunk(delta);
       },
 
+      onAdaptiveCard: async (card) => {
+        hasOutput = true;
+        await context.sendActivity({
+          type: "message",
+          attachments: [{
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: card,
+          }],
+        });
+      },
+
       onDone: async (answer, { sawRunError }) => {
-        // If nothing was streamed, send a single final message
-        if (!hasStreamed) {
+        if (!hasOutput) {
           const text =
             answer ||
             (sawRunError
@@ -321,7 +379,6 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
             streamer.queueTextChunk(text);
           }
         }
-
         await streamer.endStream();
       },
     });
@@ -331,5 +388,6 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
     await streamer.endStream();
   }
 });
+
 
 module.exports = { agentApp };
