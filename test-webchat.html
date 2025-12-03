@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Web Chat test</title>
+
+    <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+      }
+
+      #webchat {
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="webchat" role="main"></div>
+
+    <script>
+      (async function () {
+        // Your Direct Line secret – the same one you tested with fetch()
+        const SECRET = 'DIRECTLINE SECRET HERE';
+
+        // 1) Exchange secret for a Direct Line token
+        const res = await fetch(
+          'https://directline.botframework.com/v3/directline/tokens/generate',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + SECRET
+            }
+          }
+        );
+
+        if (!res.ok) {
+          const body = await res.text();
+          console.error('Failed to get token', res.status, body);
+          return;
+        }
+
+        const { token } = await res.json();
+
+        // 2) Start Web Chat with the token
+        window.WebChat.renderWebChat(
+          {
+            directLine: window.WebChat.createDirectLine({ token }),
+            userID: 'webchat_user_' + Math.random().toString(36).slice(2),
+            username: 'Bob'
+          },
+          document.getElementById('webchat')
+        );
+      })().catch(err => console.error(err));
+    </script>
+  </body>
+</html>

@@ -10,6 +10,11 @@ function buildEndpoint(base, path) {
 }
 const ENDPOINT = buildEndpoint(config.backendUrl, config.backendPath);
 
+// axios instance with a sensible timeout
+const http = axios.create({
+  timeout: 8000, // ms – adjust as you like
+});
+
 const storage = new MemoryStorage();
 const agentApp = new AgentApplication({ storage });
 
@@ -23,16 +28,18 @@ agentApp.onActivity(ActivityTypes.Typing, async (context) => {
 
 agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const userText = context.activity?.text ?? "";
+
   try {
-    const { data } = await axios.post(
+    const { data } = await http.post(
       ENDPOINT,
       { prompt: userText },
       { headers: { "Content-Type": "application/json" } }
     );
 
     let answer;
-    if (typeof data === "string") answer = data;
-    else if (data && typeof data === "object") {
+    if (typeof data === "string") {
+      answer = data;
+    } else if (data && typeof data === "object") {
       answer =
         (typeof data.answer === "string" && data.answer) ||
         (typeof data.result === "string" && data.result) ||
@@ -45,8 +52,30 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
 
     await context.sendActivity(answer);
   } catch (err) {
+    // Log for diagnostics
     console.error("backend call failed:", err?.message || err);
-    await context.sendActivity("Sorry, I couldn't generate a response right now.");
+
+    // Heuristics for “backend offline / not responding”
+    const status = err?.response?.status;
+    const code = err?.code;
+
+    const looksOffline =
+      code === "ECONNREFUSED" ||
+      code === "ENOTFOUND" ||
+      code === "ETIMEDOUT" ||
+      status === 502 ||
+      status === 503 ||
+      status === 504;
+
+    if (looksOffline) {
+      await context.sendActivity(
+        "Message received, but the backend service is offline or not responding. Please try again later."
+      );
+    } else {
+      await context.sendActivity(
+        "Sorry, I couldn't process your request due to an internal error."
+      );
+    }
   }
 });
 

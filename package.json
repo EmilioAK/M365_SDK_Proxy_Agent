@@ -15,7 +15,8 @@
         "dev": "nodemon --inspect=9239 --signal SIGINT ./src/index.js",
         "start": "node ./src/index.js",
         "test": "echo \"Error: no test specified\" && exit 1",
-        "watch": "nodemon --exec \"npm run start\""
+        "watch": "nodemon --exec \"npm run start\"",
+        "provision:directline": "node ./scripts/fetch-directline-secret.js"
     },
     "repository": {
         "type": "git",
