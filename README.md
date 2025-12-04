@@ -53,6 +53,11 @@ The following are Microsoft 365 Agents Toolkit specific project files. You can [
 |`m365agents.local.yml`|This overrides `m365agents.yml` with actions that enable local execution and debugging.|
 |`m365agents.playground.yml`| This overrides `m365agents.yml` with actions that enable local execution and debugging in Microsoft 365 Agents Playground.|
 
+## Testing Web Chat with Direct Line
+
+- For quick tests using `test-webchat.html`, add your Direct Line secret into the `SECRET` placeholder in the HTML so the sample page can fetch a token.
+- Do not use this approach in production—never expose a Direct Line secret in client code. For production, follow the guidance in [Connect a bot to Web Chat](https://learn.microsoft.com/en-us/azure/bot-service/bot-service-channel-connect-webchat?view=azure-bot-service-4.0&source=recommendations), which uses your own backend to obtain tokens securely.
+
 ## Additional information and references
 
 - [Microsoft 365 Agents Toolkit Documentations](https://docs.microsoft.com/microsoftteams/platform/toolkit/teams-toolkit-fundamentals)
@@ -64,7 +69,7 @@ The following are Microsoft 365 Agents Toolkit specific project files. You can [
 - The provisioning for `teamsApp/extendToM365` inside the yaml files (`m365agents.yml`, `m365agents.local.yml` and `m365agents.playground.yml`) is currently broken, so its commented out
 - The default deployment is also broken. You can deploy manually using a command like this:
 ```
-zip -r app.zip . -x ".git/*" "node_modules/*" ".vscode/*" "env/*" ".deployment/*" "app.zip"
+zip -r app.zip . -x ".git/*" ".vscode/*" "env/*" ".deployment/*" "app.zip"
 ```
 ```
 az webapp deploy \
