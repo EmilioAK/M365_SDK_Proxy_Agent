@@ -26,8 +26,26 @@ agentApp.onActivity(ActivityTypes.Typing, async (context) => {
   // optional log
 });
 
+// Helper to make a nice label from channelId
+function getChannelLabel(channelId) {
+  switch (channelId) {
+    case "msteams":
+      return "Teams";
+    case "directline":
+      return "Web (Direct Line)";
+    case "webchat":
+      return "Web Chat";
+    case "emulator":
+      return "Bot Framework Emulator";
+    default:
+      return channelId || "unknown";
+  }
+}
+
 agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const userText = context.activity?.text ?? "";
+  const channelId = context.activity?.channelId;
+  const channelLabel = getChannelLabel(channelId);
 
   try {
     const { data } = await http.post(
@@ -50,32 +68,15 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
       answer = String(data);
     }
 
-    await context.sendActivity(answer);
+    // Include channel info in the normal response
+    await context.sendActivity(`[${channelLabel}] ${answer}`);
   } catch (err) {
-    // Log for diagnostics
     console.error("backend call failed:", err?.message || err);
 
-    // Heuristics for “backend offline / not responding”
-    const status = err?.response?.status;
-    const code = err?.code;
-
-    const looksOffline =
-      code === "ECONNREFUSED" ||
-      code === "ENOTFOUND" ||
-      code === "ETIMEDOUT" ||
-      status === 502 ||
-      status === 503 ||
-      status === 504;
-
-    if (looksOffline) {
-      await context.sendActivity(
-        "Message received, but the backend service is offline or not responding. Please try again later."
-      );
-    } else {
-      await context.sendActivity(
-        "Sorry, I couldn't process your request due to an internal error."
-      );
-    }
+    // SIMPLE POC FALLBACK that also shows channel
+    await context.sendActivity(
+      `[${channelLabel}] Hello world! I received: "${userText}", but the backend service is not available.`
+    );
   }
 });
 
