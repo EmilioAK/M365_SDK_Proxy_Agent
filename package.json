@@ -23,6 +23,7 @@
         "url": "https://github.com"
     },
     "dependencies": {
+        "@azure/ai-projects": "^1.0.1",
         "@azure/identity": "^4.8.0",
         "@microsoft/agents-hosting-express": "^1.0.0",
         "axios": "^1.13.2"

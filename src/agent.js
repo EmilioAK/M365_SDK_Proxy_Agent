@@ -1,22 +1,114 @@
 const { ActivityTypes } = require("@microsoft/agents-activity");
 const { AgentApplication, MemoryStorage } = require("@microsoft/agents-hosting");
-const axios = require("axios");
+const { AIProjectClient } = require("@azure/ai-projects");
+const { DefaultAzureCredential } = require("@azure/identity");
 const config = require("./config");
-
-// robust join: ensures exactly one slash
-function buildEndpoint(base, path) {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return new URL(p, base).toString();
-}
-const ENDPOINT = buildEndpoint(config.backendUrl, config.backendPath);
-
-// axios instance with a sensible timeout
-const http = axios.create({
-  timeout: 8000, // ms – adjust as you like
-});
 
 const storage = new MemoryStorage();
 const agentApp = new AgentApplication({ storage });
+
+let agentsClient;
+
+function getAgentsClient() {
+  if (agentsClient) {
+    return agentsClient;
+  }
+
+  if (!config.azureAiProjectConnectionString) {
+    throw new Error(
+      "Azure AI project connection string is not configured. Set AZURE_AI_PROJECT_CONNECTION_STRING (or AZURE_AI_PROJECT_ENDPOINT_STRING/AZURE_AI_ENDPOINT)."
+    );
+  }
+
+  const options = {};
+  if (config.azureAiApiVersion) {
+    options.apiVersion = config.azureAiApiVersion;
+  }
+
+  const projectClient = new AIProjectClient(
+    config.azureAiProjectConnectionString,
+    new DefaultAzureCredential(),
+    options
+  );
+
+  agentsClient = projectClient.agents;
+  return agentsClient;
+}
+
+const activeRunStatuses = new Set(["queued", "in_progress", "cancelling"]);
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function extractMessageText(message) {
+  if (!message?.content?.length) {
+    return undefined;
+  }
+
+  const parts = message.content
+    .filter((part) => part.type === "text" && part.text?.value)
+    .map((part) => part.text.value.trim())
+    .filter(Boolean);
+
+  return parts.length ? parts.join("\n\n") : undefined;
+}
+
+async function waitForRunCompletion(client, initialRun) {
+  let run = initialRun;
+  const deadline = Date.now() + config.agentRunTimeoutMs;
+
+  while (activeRunStatuses.has(run.status) && Date.now() < deadline) {
+    await delay(config.agentRunPollIntervalMs);
+    run = await client.runs.get(run.threadId, run.id);
+  }
+
+  return run;
+}
+
+async function getLatestAssistantReply(client, threadId) {
+  const iterator = client.messages.list(threadId, { order: "desc" });
+  for await (const message of iterator) {
+    if (message.role !== "assistant") continue;
+    const text = extractMessageText(message);
+    if (text) return text;
+  }
+  return undefined;
+}
+
+async function runAgent(userText) {
+  if (!config.azureAiAgentId) {
+    throw new Error("Azure AI agent id is not configured. Set AZURE_AI_AGENT_ID.");
+  }
+
+  const client = getAgentsClient();
+  const createdRun = await client.runs.createThreadAndRun(config.azureAiAgentId, {
+    thread: {
+      messages: [
+        {
+          role: "user",
+          content: userText,
+        },
+      ],
+    },
+  });
+
+  const finishedRun = await waitForRunCompletion(client, createdRun);
+
+  if (activeRunStatuses.has(finishedRun.status)) {
+    throw new Error("Agent run did not complete before the timeout window.");
+  }
+
+  if (finishedRun.status !== "completed") {
+    if (finishedRun.status === "requires_action") {
+      const requiredTools = finishedRun.requiredAction?.submitToolOutputs?.toolCalls || [];
+      const toolSummary = requiredTools.map((tool) => tool.type).filter(Boolean).join(", ");
+      return `The agent needs tool outputs to proceed${toolSummary ? ` (${toolSummary})` : ""}.`;
+    }
+
+    throw new Error(`Agent run ended with status ${finishedRun.status}`);
+  }
+
+  const reply = await getLatestAssistantReply(client, finishedRun.threadId);
+  return reply || "The agent completed without returning a message.";
+}
 
 agentApp.onConversationUpdate("membersAdded", async (context) => {
   // optional welcome/log
@@ -48,34 +140,14 @@ agentApp.onActivity(ActivityTypes.Message, async (context) => {
   const channelLabel = getChannelLabel(channelId);
 
   try {
-    const { data } = await http.post(
-      ENDPOINT,
-      { prompt: userText },
-      { headers: { "Content-Type": "application/json" } }
-    );
-
-    let answer;
-    if (typeof data === "string") {
-      answer = data;
-    } else if (data && typeof data === "object") {
-      answer =
-        (typeof data.answer === "string" && data.answer) ||
-        (typeof data.result === "string" && data.result) ||
-        (typeof data.text === "string" && data.text) ||
-        (typeof data.content === "string" && data.content) ||
-        JSON.stringify(data);
-    } else {
-      answer = String(data);
-    }
-
-    // Include channel info in the normal response
+    const answer = await runAgent(userText);
     await context.sendActivity(`[${channelLabel}] ${answer}`);
   } catch (err) {
-    console.error("backend call failed:", err?.message || err);
+    console.error("Azure AI agent call failed:", err?.message || err);
 
-    // SIMPLE POC FALLBACK that also shows channel
+    const errorMessage = err?.message ? `(${err.message})` : "";
     await context.sendActivity(
-      `[${channelLabel}] Hello world! I received: "${userText}", but the backend service is not available.`
+      `[${channelLabel}] Sorry, I could not reach the Azure AI agent right now ${errorMessage}`.trim()
     );
   }
 });
