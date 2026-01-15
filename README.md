@@ -23,6 +23,11 @@ It showcases a simple proxy agent, which simply forwards messages between Teams/
 node -e "require('http').createServer((req,res)=>{if(req.method==='POST'&&req.url==='/chat'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify({answer:'Hello, world!'}));});}else{res.statusCode=404;res.end('not found');}}).listen(8000,()=>console.log('backend on 8000'))"
 ```
 
+> Backend example for the Agent Picker
+```
+node -e "require('http').createServer((req,res)=>{if(req.method==='GET'&&req.url==='/agents'){res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify([{id:'legal',name:'Legal Agent',url:'http://127.0.0.1:8000'},{id:'ops',name:'Ops Agent',url:'http://127.0.0.1:8000'},{id:'dev',name:'Dev Agent',url:'http://127.0.0.1:8000'}]));}else{res.statusCode=404;res.end('not found');}}).listen(3000,()=>console.log('registry on 3000'))"
+```
+
 **Congratulations**! You are running an agent that can now interact with users in Microsoft 365 Agents Playground:
 
 ![Basic AI Agent](https://github.com/user-attachments/assets/984af126-222b-4c98-9578-0744790b103a)

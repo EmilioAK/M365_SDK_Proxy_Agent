@@ -3,80 +3,109 @@ const { AgentApplication, MemoryStorage } = require("@microsoft/agents-hosting")
 const axios = require("axios");
 const config = require("./config");
 
-// robust join: ensures exactly one slash
-function buildEndpoint(base, path) {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return new URL(p, base).toString();
-}
-const ENDPOINT = buildEndpoint(config.backendUrl, config.backendPath);
+// --- 1. Load Registry on Startup ---
+let agentList = [];
 
-// axios instance with a sensible timeout
-const http = axios.create({
-  timeout: 8000, // ms – adjust as you like
-});
-
-const storage = new MemoryStorage();
-const agentApp = new AgentApplication({ storage });
-
-agentApp.onConversationUpdate("membersAdded", async (context) => {
-  // optional welcome/log
-});
-
-agentApp.onActivity(ActivityTypes.Typing, async (context) => {
-  // optional log
-});
-
-// Helper to make a nice label from channelId
-function getChannelLabel(channelId) {
-  switch (channelId) {
-    case "msteams":
-      return "Teams";
-    case "directline":
-      return "Web (Direct Line)";
-    case "webchat":
-      return "Web Chat";
-    case "emulator":
-      return "Bot Framework Emulator";
-    default:
-      return channelId || "unknown";
+async function refreshRegistry() {
+  try {
+    console.log(`Fetching agents from ${config.agentRegistryUrl}...`);
+    const { data } = await axios.get(config.agentRegistryUrl);
+    agentList = Array.isArray(data) ? data : [];
+    console.log(`Registry loaded: ${agentList.map(a => a.name).join(", ")}`);
+  } catch (err) {
+    console.error("Could not load agent registry:", err.message);
   }
 }
 
-agentApp.onActivity(ActivityTypes.Message, async (context) => {
-  const userText = context.activity?.text ?? "";
-  const channelId = context.activity?.channelId;
-  const channelLabel = getChannelLabel(channelId);
+// Initial fetch
+refreshRegistry();
 
+// --- 2. Setup Agent App ---
+const storage = new MemoryStorage();
+const agentApp = new AgentApplication({ storage });
+const http = axios.create({ timeout: 8000 });
+
+// --- 3. Interaction Logic ---
+agentApp.onActivity(ActivityTypes.Message, async (context) => {
+  const userText = context.activity.text ? context.activity.text.trim() : "";
+  
+  // Define a state key unique to this conversation
+  const stateKey = `conversation/${context.activity.conversation.id}`;
+  const stateItems = await storage.read([stateKey]);
+  let state = stateItems[stateKey] || {};
+
+  // CHECK: Do we have a selected agent yet?
+  if (!state.selectedAgentUrl) {
+    
+    // logic: Is the user trying to make a selection? (e.g. typing "1", "2")
+    const selectionIndex = parseInt(userText) - 1;
+    
+    if (!isNaN(selectionIndex) && agentList[selectionIndex]) {
+      // VALID SELECTION: Save it to state
+      const selected = agentList[selectionIndex];
+      state.selectedAgentUrl = selected.url;
+      state.selectedAgentName = selected.name;
+      
+      // Save state
+      await storage.write({ [stateKey]: state });
+      
+      await context.sendActivity(`**Connected to ${selected.name}**. \n\nHow can I help you?`);
+      return; 
+    } 
+
+    // NO SELECTION: Show the menu
+    if (agentList.length === 0) {
+      await context.sendActivity("System: No agents found in registry. Trying to refresh...");
+      await refreshRegistry();
+      return;
+    }
+
+    let menu = "**Please select an agent by typing the number:**\n\n";
+    agentList.forEach((agent, index) => {
+      menu += `${index + 1}. ${agent.name}\n`;
+    });
+
+    await context.sendActivity(menu);
+    return; // Stop here, wait for next message (the selection)
+  }
+
+  // --- 4. Proxy Logic (User has already selected an agent) ---
+  
+  // Optional: "Switch" command to go back to menu
+  if (userText.toLowerCase() === "switch") {
+    await storage.delete([stateKey]);
+    await context.sendActivity("Agent selection cleared.");
+    // Force the menu to show immediately by calling yourself (optional) or just wait for next input
+    return;
+  }
+
+  // Forward to the SPECIFIC agent url saved in state
   try {
+    // Determine target endpoint (assumes agent listens on /chat or root, adjusting for your specific backend)
+    // Based on your registry, the URL is "http://127.0.0.1:8000"
+    // We append "/chat" or similar if your backend requires it, otherwise use raw.
+    // Assuming backend needs strict URL + path:
+    const targetUrl = new URL("/chat", state.selectedAgentUrl).toString();
+
     const { data } = await http.post(
-      ENDPOINT,
+      targetUrl,
       { prompt: userText },
       { headers: { "Content-Type": "application/json" } }
     );
 
+    // Handle response format
     let answer;
-    if (typeof data === "string") {
-      answer = data;
-    } else if (data && typeof data === "object") {
-      answer =
-        (typeof data.answer === "string" && data.answer) ||
-        (typeof data.result === "string" && data.result) ||
-        (typeof data.text === "string" && data.text) ||
-        (typeof data.content === "string" && data.content) ||
-        JSON.stringify(data);
+    if (typeof data === "string") answer = data;
+    else if (data && typeof data === "object") {
+        answer = data.answer || data.result || data.content || JSON.stringify(data);
     } else {
-      answer = String(data);
+        answer = String(data);
     }
 
-    // Include channel info in the normal response
-    await context.sendActivity(`[${channelLabel}] ${answer}`);
-  } catch (err) {
-    console.error("backend call failed:", err?.message || err);
+    await context.sendActivity(`[${state.selectedAgentName}] ${answer}`);
 
-    // SIMPLE POC FALLBACK that also shows channel
-    await context.sendActivity(
-      `[${channelLabel}] Hello world! I received: "${userText}", but the backend service is not available.`
-    );
+  } catch (err) {
+    await context.sendActivity(`[System] Error contacting ${state.selectedAgentName}: ${err.message}`);
   }
 });
 
