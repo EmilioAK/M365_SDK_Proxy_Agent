@@ -2,6 +2,7 @@ const statusEl = document.getElementById("status");
 const agentsEl = document.getElementById("agents");
 
 let conversationId = null;
+let userId = null;
 let selectedAgentId = null;
 
 function setStatus(message, tone = "info") {
@@ -32,11 +33,15 @@ async function loadContext() {
   try {
     await window.microsoftTeams.app.initialize();
     const context = await window.microsoftTeams.app.getContext();
+    userId = context?.user?.aadObjectId || context?.user?.id || userId;
     conversationId =
       conversationId ||
       context?.chat?.id ||
+      context?.chat?.threadId ||
       context?.channel?.id ||
       context?.conversation?.id ||
+      context?.chatId ||
+      context?.groupId ||
       null;
   } catch (err) {
     console.warn("Could not initialize Teams SDK:", err);
@@ -80,9 +85,13 @@ async function loadAgents() {
 }
 
 async function loadCurrentSelection() {
-  if (!conversationId) return;
+  if (!conversationId && !userId) return;
   try {
-    const res = await fetch(`/api/selection?conversationId=${encodeURIComponent(conversationId)}`);
+    const url = new URL("/api/selection", window.location.origin);
+    if (conversationId) url.searchParams.set("conversationId", conversationId);
+    if (userId) url.searchParams.set("userId", userId);
+
+    const res = await fetch(url.toString());
     if (!res.ok) {
       throw new Error(`Request failed with status ${res.status}`);
     }
@@ -100,8 +109,8 @@ async function loadCurrentSelection() {
 }
 
 async function selectAgent(agentId) {
-  if (!conversationId) {
-    setStatus("Missing conversation id. Open this tab in Teams.", "error");
+  if (!conversationId && !userId) {
+    setStatus("Missing context. Open this tab in Teams.", "error");
     return;
   }
 
@@ -111,7 +120,7 @@ async function selectAgent(agentId) {
     const res = await fetch("/api/select-agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, agentId }),
+      body: JSON.stringify({ conversationId, userId, agentId }),
     });
 
     if (!res.ok) {
@@ -132,13 +141,17 @@ async function selectAgent(agentId) {
 async function init() {
   await loadContext();
 
-  if (!conversationId) {
-    setStatus("Open this tab in Teams to capture the chat context.", "error");
+  if (!conversationId && !userId) {
+    setStatus("Open this tab in Teams to capture context.", "error");
     return;
   }
 
   await loadAgents();
   await loadCurrentSelection();
+
+  if (!conversationId && userId) {
+    setStatus("Using your account to remember the selection for chats.", "info");
+  }
 }
 
 init();

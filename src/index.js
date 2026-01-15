@@ -12,6 +12,8 @@ const {
   getAgentList,
   setSelectionForConversationById,
   getSelectionForConversation,
+  setSelectionForUserById,
+  getSelectionForUser,
 } = require("./agent");
 
 const authConfig = loadAuthConfigFromEnv();
@@ -31,27 +33,44 @@ server.get("/api/agents", async (_req, res) => {
 });
 
 server.get("/api/selection", async (req, res) => {
-  const { conversationId } = req.query;
-  if (!conversationId) {
-    return res.status(400).json({ error: "conversationId is required" });
+  const { conversationId, userId } = req.query;
+  if (!conversationId && !userId) {
+    return res.status(400).json({ error: "conversationId or userId is required" });
   }
 
-  const selection = await getSelectionForConversation(conversationId);
+  const selection =
+    (conversationId && (await getSelectionForConversation(conversationId))) ||
+    (userId && (await getSelectionForUser(userId)));
   res.json({ selection });
 });
 
 server.post("/api/select-agent", async (req, res) => {
-  const { conversationId, agentId } = req.body || {};
-  if (!conversationId || !agentId) {
-    return res.status(400).json({ error: "conversationId and agentId are required" });
+  const { conversationId, userId, agentId } = req.body || {};
+  if (!agentId || (!conversationId && !userId)) {
+    return res
+      .status(400)
+      .json({ error: "agentId is required, plus either conversationId or userId" });
   }
 
-  const selection = await setSelectionForConversationById(conversationId, agentId);
+  let selection = null;
+  if (conversationId) {
+    selection = await setSelectionForConversationById(conversationId, agentId);
+  }
+  if (!selection && userId) {
+    selection = await setSelectionForUserById(userId, agentId);
+  }
+
   if (!selection) {
     return res.status(404).json({ error: "Agent not found in registry" });
   }
 
-  res.json({ selection });
+  // Keep user selection in sync when both identifiers are present
+  if (selection && userId && conversationId) {
+    await setSelectionForUserById(userId, agentId);
+    await setSelectionForConversationById(conversationId, agentId);
+  }
+
+  res.json({ selection, appliedTo: { conversationId, userId } });
 });
 
 // Bot endpoint with JWT auth
