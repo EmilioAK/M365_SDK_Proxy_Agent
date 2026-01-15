@@ -25,7 +25,8 @@
     "dependencies": {
         "@azure/identity": "^4.8.0",
         "@microsoft/agents-hosting-express": "^1.0.0",
-        "axios": "^1.13.2"
+        "axios": "^1.13.2",
+        "express": "^5.1.0"
     },
     "devDependencies": {
         "env-cmd": "^10.1.0",
