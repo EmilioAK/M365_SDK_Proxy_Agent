@@ -1,80 +1,176 @@
-# Overview of the Proxy Agent
+# Proxy Agent Template (Microsoft 365 Agents SDK)
 
-This app template is built on top of [Microsoft 365 Agents SDK](https://github.com/Microsoft/Agents).
-It showcases a simple proxy agent, which simply forwards messages between Teams/M365 and your own agent endpoint
+This template hosts a proxy agent built with the [Microsoft 365 Agents SDK](https://github.com/Microsoft/Agents).  
+The SDK-facing app receives user messages from Teams/M365 and forwards them to your own backend agent endpoint.
 
-## Get started with the template
+## 1) What you need to set it up
 
-> **Prerequisites**
->
-> To run the template in your local dev machine, you will need:
->
-> - [Node.js](https://nodejs.org/), supported versions: 18, 20, 22.
-> - [Microsoft 365 Agents Toolkit Visual Studio Code Extension](https://aka.ms/teams-toolkit) latest version or [Microsoft 365 Agents Toolkit CLI](https://aka.ms/teamsfx-toolkit-cli).
+### Required tools
+- [Node.js](https://nodejs.org/) 18, 20, or 22
+- `npm`
+- [Microsoft 365 Agents Toolkit Visual Studio Code Extension](https://aka.ms/teams-toolkit) or [Microsoft 365 Agents Toolkit CLI](https://aka.ms/teamsfx-toolkit-cli)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (required for manual zip deploy and Direct Line helper script)
+- Azure subscription with permissions to provision resources
 
-> For local debugging using Microsoft 365 Agents Toolkit CLI, you need to do some extra steps described in [Set up your Microsoft 365 Agents Toolkit CLI for local debugging](https://aka.ms/teamsfx-cli-debugging).
+### Required access
+- A Microsoft 365 tenant where you can run/debug the app
+- The tenant must allow custom app upload (Teams app upload enabled)
+- Azure permissions to create/update:
+  - Resource group
+  - App Service plan + Web App
+  - Managed identity
+  - Azure Bot registration
 
-1. First, select the Microsoft 365 Agents Toolkit icon on the left in the VS Code toolbar.
-1. Press F5 to start debugging which launches your agent in Microsoft 365 Agents Playground using a web browser. Select `Debug in Microsoft 365 Agents Playground`.
-1. You can send any message to get a response from the agent.
+### Runtime configuration
+The proxy reads these environment variables from [`src/config.js`](./src/config.js):
+- `BACKEND_URL` (default: `http://127.0.0.1:8000`)
+- `BACKEND_PATH` (default: `/chat`)
 
-> You also need to have some sort of backend running. Here is a simple example that just echos "Hello, World!" back to the agent:
+For local debugging, toolkit environment files are used (`env/.env.*`, `.localConfigs*`).
+
+## SDK <-> agent contract (important)
+
+This is the integration contract between the SDK host app (`src/agent.js`) and your backend agent API.
+
+### Request sent to your backend
+- Method: `POST`
+- URL: `${BACKEND_URL}${BACKEND_PATH}`
+- Headers: `Content-Type: application/json`
+- Body:
+
+```json
+{
+  "prompt": "user message text"
+}
 ```
+
+### Accepted backend response formats
+The proxy accepts any of the following:
+1. Plain text response body
+2. JSON with the first available string field:
+   - `answer`
+   - `result`
+   - `text`
+   - `content`
+3. Any other JSON object (stringified before returning to the user)
+
+### What the user sees
+The proxy responds as:
+
+```text
+[<channel>] <resolved answer>
+```
+
+Channel labels are normalized:
+- `msteams` -> `Teams`
+- `directline` -> `Web (Direct Line)`
+- `webchat` -> `Web Chat`
+- `emulator` -> `Bot Framework Emulator`
+
+### Timeout and error behavior
+- Backend timeout is 8 seconds.
+- On backend failure/unreachable endpoint, the user gets a fallback message.
+
+## 2) How to get it up and running
+
+### A) Install dependencies
+
+```bash
+npm install
+```
+
+### B) Start your backend agent service
+Your backend should expose `POST /chat` (or your configured `BACKEND_PATH`).
+
+Quick local echo backend:
+
+```bash
 node -e "require('http').createServer((req,res)=>{if(req.method==='POST'&&req.url==='/chat'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify({answer:'Hello, world!'}));});}else{res.statusCode=404;res.end('not found');}}).listen(8000,()=>console.log('backend on 8000'))"
 ```
 
-**Congratulations**! You are running an agent that can now interact with users in Microsoft 365 Agents Playground:
+### C) Run the proxy locally
+Use either flow:
 
-![Basic AI Agent](https://github.com/user-attachments/assets/984af126-222b-4c98-9578-0744790b103a)
+If this is your first local CLI run, provision local dependencies first:
 
-## What's included in the template
-
-| Folder       | Contents                                            |
-| - | - |
-| `.vscode`    | VSCode files for debugging                          |
-| `appPackage` | Templates for the application manifest        |
-| `env`        | Environment files                                   |
-| `infra`      | Templates for provisioning Azure resources          |
-| `src`        | The source code for the application                 |
-
-The following files can be customized and demonstrate an example implementation to get you started.
-
-| File                                 | Contents                                           |
-| - | - |
-|`src/index.js`| Sets up the agent server.|
-|`src/config.js`| Defines the environment variables.|
-|`src/agent.js`| Handles business logics for the Proxy Agent.|
-
-The following are Microsoft 365 Agents Toolkit specific project files. You can [visit a complete guide on Github](https://github.com/OfficeDev/TeamsFx/wiki/Teams-Toolkit-Visual-Studio-Code-v5-Guide#overview) to understand how Microsoft 365 Agents Toolkit works.
-
-| File                                 | Contents                                           |
-| - | - |
-|`m365agents.yml`|This is the main Microsoft 365 Agents Toolkit project file. The project file defines two primary things:  Properties and configuration Stage definitions. |
-|`m365agents.local.yml`|This overrides `m365agents.yml` with actions that enable local execution and debugging.|
-|`m365agents.playground.yml`| This overrides `m365agents.yml` with actions that enable local execution and debugging in Microsoft 365 Agents Playground.|
-
-## Testing Web Chat with Direct Line
-
-- For quick tests using `test-webchat.html`, add your Direct Line secret into the `SECRET` placeholder in the HTML so the sample page can fetch a token.
-- Do not use this approach in production—never expose a Direct Line secret in client code. For production, follow the guidance in [Connect a bot to Web Chat](https://learn.microsoft.com/en-us/azure/bot-service/bot-service-channel-connect-webchat?view=azure-bot-service-4.0&source=recommendations), which uses your own backend to obtain tokens securely.
-
-## Additional information and references
-
-- [Microsoft 365 Agents Toolkit Documentations](https://docs.microsoft.com/microsoftteams/platform/toolkit/teams-toolkit-fundamentals)
-- [Microsoft 365 Agents Toolkit CLI](https://aka.ms/teamsfx-toolkit-cli)
-- [Microsoft 365 Agents Toolkit Samples](https://github.com/OfficeDev/TeamsFx-Samples)
-
-## Known issues
-- The agent is currently not working in any Teams group chats or Teams channels when the stream response is enabled.
-- The provisioning for `teamsApp/extendToM365` inside the yaml files (`m365agents.yml`, `m365agents.local.yml` and `m365agents.playground.yml`) is currently broken, so its commented out
-- The default deployment is also broken. You can deploy manually using a command like this:
+```bash
+teamsapp provision --env local
 ```
+
+1. VS Code (recommended)
+   - Open the project in VS Code.
+   - Press `F5`.
+   - Select `Debug in Microsoft 365 Agents Playground`.
+2. CLI
+
+```bash
+npm run dev:teamsfx:playground
+```
+
+In a second terminal:
+
+```bash
+npm run dev:teamsfx:launch-playground
+```
+
+## 3) How to deploy
+
+The template's default `teamsapp deploy` flow is currently broken, so use manual zip deploy after provisioning.
+
+### A) Provision Azure resources
+Use Microsoft 365 Agents Toolkit (VS Code) or toolkit CLI provision for your target environment.
+
+Example:
+
+```bash
+teamsapp provision --env dev
+```
+
+### B) Package the app
+
+```bash
 zip -r app.zip . -x ".git/*" ".vscode/*" "env/*" ".deployment/*" "app.zip"
 ```
-```
+
+### C) Deploy package to Azure App Service
+
+```bash
 az webapp deploy \
   --resource-group <RESOURCE_GROUP> \
   --name <WEBAPP_NAME> \
   --src-path <PATH_TO_PACKAGE> \
   --type zip
 ```
+
+### D) Optional: fetch/update Direct Line secret in local env
+
+```bash
+npm run provision:directline
+```
+
+## 4) Current issues
+- Streaming responses are not currently working in Teams group chats or Teams channels.
+- `teamsApp/extendToM365` provisioning is currently broken and remains commented out in:
+  - `m365agents.yml`
+  - `m365agents.local.yml`
+  - `m365agents.playground.yml`
+- Default `teamsapp deploy` flow in this template is broken; use manual zip deploy.
+
+## Project layout
+
+| Path | Purpose |
+| - | - |
+| `src/index.js` | Starts the agent server |
+| `src/agent.js` | Proxy logic and backend forwarding |
+| `src/config.js` | Runtime backend endpoint config |
+| `infra/` | Azure infrastructure templates |
+| `appPackage/` | App manifest and package assets |
+
+## Testing Web Chat with Direct Line
+- For quick tests using `test-webchat.html`, place your Direct Line secret in the `SECRET` placeholder.
+- Do not use that approach in production. For production guidance, see [Connect a bot to Web Chat](https://learn.microsoft.com/en-us/azure/bot-service/bot-service-channel-connect-webchat?view=azure-bot-service-4.0&source=recommendations).
+
+## References
+- [Microsoft 365 Agents Toolkit documentation](https://docs.microsoft.com/microsoftteams/platform/toolkit/teams-toolkit-fundamentals)
+- [Microsoft 365 Agents Toolkit CLI](https://aka.ms/teamsfx-toolkit-cli)
+- [Microsoft 365 Agents Toolkit samples](https://github.com/OfficeDev/TeamsFx-Samples)
