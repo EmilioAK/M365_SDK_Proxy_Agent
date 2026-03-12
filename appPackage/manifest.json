@@ -58,10 +58,22 @@
     ],
     "composeExtensions": [],
     "configurableTabs": [],
-    "staticTabs": [],
+    "staticTabs": [
+        {
+            "entityId": "agentSwitcher",
+            "name": "Agent Switcher",
+            "contentUrl": "https://${{BOT_DOMAIN}}/tab/index.html",
+            "websiteUrl": "https://${{BOT_DOMAIN}}/tab/index.html",
+            "scopes": [
+                "personal"
+            ]
+        }
+    ],
     "permissions": [
         "identity",
         "messageTeamMembers"
     ],
-    "validDomains": []
+    "validDomains": [
+        "${{BOT_DOMAIN}}"
+    ]
 }
