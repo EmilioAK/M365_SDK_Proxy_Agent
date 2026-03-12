@@ -872,4 +872,4 @@ A: Use Application Insights (automatically enabled in Azure) and check agent res
 
 ---
 
-**Made with ❤️ by [Emilio Alvarez] and [Albert Tanure](https://www.linkedin.com/in/albert-tanure) for modern enterprises. Ready to scale your agent ecosystem!** 🚀
+**Made with ❤️ by [Emilio Alvarez](https://www.linkedin.com/in/emilioak/) and [Albert Tanure](https://www.linkedin.com/in/albert-tanure) for modern enterprises. Ready to scale your agent ecosystem!** 🚀
