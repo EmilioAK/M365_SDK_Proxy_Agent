@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Switcher</title>
+    <style>
+      :root {
+        --bg: #f3f2f1;
+        --panel: #ffffff;
+        --text: #201f1e;
+        --muted: #605e5c;
+        --border: #e1dfdd;
+        --divider: #edebe9;
+        --accent: #464eb8;
+        --accent-strong: #3b3fa3;
+        --success: #107c10;
+        --error: #c4314b;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        padding: 24px;
+      }
+
+      .surface {
+        width: min(960px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        padding: 24px 24px 28px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .pill {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #5b5fc7, #464eb8);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.01em;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .status {
+        margin: 12px 0 16px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #f8f8f8;
+        color: var(--text);
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .status.info {
+        color: var(--muted);
+      }
+
+      .status.success {
+        color: var(--success);
+        border-color: #cce2cc;
+        background: #f4faf4;
+      }
+
+      .status.error {
+        color: var(--error);
+        border-color: #f3d6dd;
+        background: #fdf4f7;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      button.agent {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        padding: 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: left;
+        font-size: 14px;
+        transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+      }
+
+      button.agent:hover {
+        border-color: var(--divider);
+        background: #f8f8f8;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+      }
+
+      button.agent.selected {
+        border-color: var(--accent);
+        background: #f2f1fc;
+        box-shadow: 0 0 0 1px rgba(70, 78, 184, 0.25);
+      }
+
+      button.agent:active {
+        border-color: var(--accent-strong);
+      }
+
+      .agent-name {
+        display: block;
+        font-weight: 600;
+      }
+
+      .agent-meta {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="surface">
+      <div class="header">
+        <div class="pill">A</div>
+        <div>
+          <h1>Agent Switcher</h1>
+          <p>Choose which agent receives your next messages.</p>
+        </div>
+      </div>
+
+      <div id="status" class="status info">Loading agents…</div>
+      <div id="agents" class="grid"></div>
+    </main>
+
+    <script src="https://res.cdn.office.net/teams-js/2.13.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

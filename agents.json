@@ -1,0 +1,30 @@
+[
+  {
+    "id": "finops",
+    "name": "FinOps Agent",
+    "url": "http://127.0.0.1:8001",
+    "description": "Agent for financial operations and cost optimization",
+    "cardFormat": "agui-v1"
+  },
+  {
+    "id": "snowflake",
+    "name": "Snowflake Agent",
+    "url": "http://127.0.0.1:8002",
+    "description": "Agent for data warehouse and analytics queries",
+    "cardFormat": "agui-v1"
+  },
+  {
+    "id": "architect",
+    "name": "Architect Agent",
+    "url": "http://127.0.0.1:8003",
+    "description": "Agent for architectural design and planning",
+    "cardFormat": "agui-v1"
+  },
+  {
+    "id": "hr",
+    "name": "HR Agent",    
+    "url": "http://120.0.0.1.8004",
+    "description": "Agent for human resources and employee management",
+    "cardFormat": "agui-v1"
+  }
+]

@@ -14,6 +14,12 @@
         "dev:teamsfx:launch-playground": "env-cmd --silent -f env/.env.playground teamsapptester start",
         "dev": "nodemon --inspect=9239 --signal SIGINT ./src/index.js",
         "start": "node ./src/index.js",
+        "start:backend": "node -e \"require('http').createServer((req,res)=>{if(req.method==='POST'&&req.url==='/chat'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify({answer:'Hello, world!'}));});}else{res.statusCode=404;res.end('not found');}}).listen(8000,()=>console.log('backend on 8000'))\"",
+        "start:registry": "node -e \"require('http').createServer((req,res)=>{if(req.method==='GET'&&req.url==='/agents'){res.statusCode=200;res.setHeader('content-type','application/json');res.end(JSON.stringify([{id:'legal',name:'Legal Agent',url:'http://127.0.0.1:8000'},{id:'ops',name:'Ops Agent',url:'http://127.0.0.1:8000'},{id:'dev',name:'Dev Agent',url:'http://127.0.0.1:8000'}]));}else{res.statusCode=404;res.end('not found');}}).listen(3000,()=>console.log('registry on 3000'))\"",
+        "start:services": "concurrently \"npm run start:backend\" \"npm run start:registry\"",
+        "start:finops": "node scripts/mock-finops-agent.js",
+        "start:snowflake": "node scripts/mock-snowflake-agent.js",
+        "start:all-agents": "concurrently \"npm run start:finops\" \"npm run start:snowflake\"",
         "test": "echo \"Error: no test specified\" && exit 1",
         "watch": "nodemon --exec \"npm run start\"",
         "provision:directline": "node ./scripts/fetch-directline-secret.js"
@@ -25,9 +31,11 @@
     "dependencies": {
         "@azure/identity": "^4.8.0",
         "@microsoft/agents-hosting-express": "^1.0.0",
-        "axios": "^1.13.2"
+        "axios": "^1.13.2",
+        "express": "^5.1.0"
     },
     "devDependencies": {
+        "concurrently": "^8.2.2",
         "env-cmd": "^10.1.0",
         "nodemon": "^3.1.10",
         "shx": "^0.3.3"
